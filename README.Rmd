@@ -1,0 +1,107 @@
+---
+output: rmarkdown::github_document
+---
+
+`r7snr` : Tools to work with Rapid7 scans.io Sonar Data
+
+The following functions are implemented:
+
+- `snr_parse_response`: Parse Sonar HTTP study encoded `data` response.
+
+### Installation
+
+```{r eval=FALSE}
+devtools::install_github("hrbrmstr/r7snr")
+```
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, error=FALSE}
+options(width=120)
+```
+
+### Usage
+
+This R package will let you work directly with the gzip'd JSON from Rapid7 scans.io Sonar HTTP studies.
+
+Be warned that these are HUGE files and it's very likely this won't fit into memory on any system.
+
+```{r message=FALSE}
+library(r7snr)
+
+# current verison
+packageVersion("r7snr")
+
+library(r7snr)
+library(jsonlite)
+library(purrr)
+library(dplyr)
+library(purrr)
+```
+
+For this example, we'll grab the first 10 records from the 2016-07-05 HTTP study. 
+It may report a message of "gzcat: error writing to output: Broken pipe" that we can ignore
+
+```{r}
+system("curl --silent 'https://scans.io/data/rapid7/sonar.http/20160705-http.gz' | gzcat | head -100",
+       intern=TRUE) %>%
+  map_df(fromJSON) -> http_scan_records
+```
+
+We can take a look a the scan records to find that we have the:
+ 
+- virtual host name (this will have real virtual host names in forthcoming studies
+- the host (both of these are reported by zmap/zgrab)
+- data, which is a base 64 encoded version of the HTTP response (up to 32K)
+- port, which is the port the grabber connected to
+- ip, the IP address the grabber connected to
+
+```{r}
+glimpse(http_scan_records)
+```
+
+We can examine one of them:
+
+```{r}
+str(snr_parse_response(http_scan_records$data[10]))
+```
+
+Or, we can turn them all into a data frame:
+
+```{r}
+map_df(1:nrow(http_scan_records), function(i) {
+  x <- http_scan_records[i,]
+  resp <- snr_parse_response(x$data)[[1]]
+  data_frame(
+    vhost=x$vhost, 
+    host=x$host,
+    port=x$port,
+    ip=x$ip,
+    status=resp$status,
+    version=resp$version,
+    body=resp$body,
+    headers=list(resp$headers, stringsAsFactors=FALSE)
+  )
+}) -> parsed_records
+```
+
+Now we have a fairly usable data frame.
+
+```{r}
+glimpse(parsed_records)
+```
+
+We can now see the server types for what we've read in. Since that is not a 
+required header, it may not be there so we have to handle `NULL` values.
+
+```{r}
+map(parsed_records$headers, "server") %>% 
+  map_chr(function(x) ifelse(length(x)>0, x, NA)) %>% 
+  table(exclude=FALSE) %>% 
+  as.data.frame(stringsAsFactors=FALSE) %>% 
+  setNames(c("type", "count")) %>% 
+  arrange(desc(count))
+```
+
+If you're going to use this to process the Sonar HTTP studies, it's suggested you will want to
+use the [`jqr`](https://cran.rstudio.com/web/packages/jqr/) package to filter the downloaded gzip'd JSON file (which does mean learning the `jq` [filter syntax](https://stedolan.github.io/jq/manual/v1.4/)).
+
+An alternative to using this R package is to follow the example on the [Sonar Wiki](https://github.com/rapid7/sonar/wiki/HTTP) and generate a HUGE JSON file from the results (NOTE: this will be over 1TB when some of our newer scans start to be posted). Then, use either `jqr` or `jq` on the command-line to extract fields you want/need and _then_ process the resultant JSON in R.

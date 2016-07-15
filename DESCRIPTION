@@ -1,0 +1,24 @@
+Package: r7snr
+Type: Package
+Title: r7snr title goes here
+Version: 0.1.0
+Date: 2016-07-15
+Author: Bob Rudis (@hrbrmstr)
+Maintainer: Bob Rudis <bob@rudis.net>
+Description: r7snr description goes here
+URL: http://github.com/hrbrmstr/r7snr
+BugReports: https://github.com/hrbrmstr/r7snr/issues
+License: MIT
+Suggests:
+    testthat
+Depends:
+    R (>= 3.0.0)
+Imports:
+    purrr,
+    xml2,
+    jsonlite,
+    readr,
+    utils,
+    RCurl,
+    stringi
+RoxygenNote: 5.0.1
